@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blazzy Game</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.6.9/dist/ethers.umd.min.js"></script>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-image: url('https://ipfs.io/ipfs/QmaGjJR9WbEqcbZWTqut64iJfZ33PepcNBtsFwai7mZnKZ?filename=HH.png');
+      background-size: cover;
+      background-position: center;
+      color: white;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 3.5rem;
+      color: #FFFFFF;
+      text-shadow: 3px 3px 12px rgba(0, 0, 0, 0.8);
+      margin-bottom: 20px;
+    }
+
+    h3 {
+      font-size: 2rem;
+      color: #FFFFFF;
+      text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.6);
+    }
+
+    .game-container {
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+      width: 80%;
+      max-width: 500px;
+      margin-top: 50px;
+    }
+
+    .stats-container {
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 10px;
+      font-size: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .buttons-container {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 20px;
+    }
+
+    button {
+      padding: 15px 30px;
+      margin: 10px;
+      border: none;
+      cursor: pointer;
+      background-image: url('https://ipfs.io/ipfs/QmQw7qgiMQZu41vHicp1Ym3tVrBmSpMCCbodT1vc5Uwgmt?filename=JFJ.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      color: transparent;
+      font-size: 20px;
+      width: 150px;
+      height: 150px;
+      transition: transform 0.3s ease-in-out, background-color 0.3s;
+    }
+
+    button:hover {
+      transform: scale(1.1);
+      background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    button:active {
+      transform: scale(0.9);
+    }
+
+    .wallet-status {
+      font-size: 1.5rem;
+      margin-top: 20px;
+      color: #FFFFFF;
+      font-weight: bold;
+    }
+
+    .user-stats p {
+      font-size: 1.5rem;
+      margin: 5px 0;
+    }
+
+    .tap-button {
+      background-color: transparent;
+      border: 2px solid #00FF00;
+      width: 200px;
+      height: 200px;
+      background-position: center;
+      background-size: contain;
+      border-radius: 50%;
+      margin: 20px 0;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .claim-tokens-button, .level-up-tap-button, .level-up-energy-bar-button, .burn-tokens-button {
+      background-color: #FFD700;
+      color: black;
+      font-size: 18px;
+      padding: 15px;
+      border-radius: 10px;
+      width: 200px;
+      height: 50px;
+      cursor: pointer;
+      transition: transform 0.3s ease-in-out;
+    }
+
+    .claim-tokens-button:hover, .level-up-tap-button:hover, .level-up-energy-bar-button:hover, .burn-tokens-button:hover {
+      transform: scale(1.05);
+    }
+
+    .claim-tokens-button:active, .level-up-tap-button:active, .level-up-energy-bar-button:active, .burn-tokens-button:active {
+      transform: scale(0.95);
+    }
+
+  </style>
+</head>
+<body>
+
+  <h1>Blazzy Game</h1>
+
+  <div class="game-container">
+    <p id="wallet-status">Connect your wallet to start playing.</p>
+    <button id="connect-wallet" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+
+  <div class="buttons-container">
+    <button id="tap-button" class="tap-button" style="display:none;" onclick="tap()">
+      <span class="button-label">Tap</span>
+    </button>
+    <button id="claim-tokens-button" class="claim-tokens-button" style="display:none;" onclick="claimTokens()">Claim Tokens</button>
+    <button id="level-up-tap-button" class="level-up-tap-button" style="display:none;" onclick="levelUpPointsPerTap()">Level Up Tap</button>
+    <button id="level-up-energy-bar-button" class="level-up-energy-bar-button" style="display:none;" onclick="levelUpEnergyBar()">Level Up Energy Bar</button>
+    <button id="burn-tokens-button" class="burn-tokens-button" style="display:none;" onclick="burnTokens()">Burn Tokens</button>
+  </div>
+
+  <div class="stats-container">
+    <h3>User Stats</h3>
+    <div class="user-stats">
+      <p>Points: <span id="points">0</span></p>
+      <p>Points per Tap: <span id="points-per-tap">0</span></p>
+      <p>Energy Bar: <span id="energy-bar">0</span></p>
+      <p>Burn Multiplier: <span id="burn-multiplier">0</span></p>
+    </div>
+  </div>
+
+  <script>
+    let provider, signer, userAddress;
+    let gameContract, tokenContract;
+
+    const gameContractAddress = '0x1Da9a9d0A5F4B615C54821f74Fed4769a6963102'; // Replace with your game contract address
+    const tokenContractAddress = '0x9Ef3fc220867F6cF5655Db3d950cDA67A3a92F9f'; // Replace with your token contract address
+
+    const gameABI = [{"inputs":[{"internalType":"address","name":"_token","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"baseDailyClaimAmount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"burnAmount","type":"uint256"}],"name":"burnTokensForMultiplier","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"claimDailyTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"claimTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserStats","outputs":[{"internalType":"uint256","name":"points","type":"uint256"},{"internalType":"uint256","name":"pointsPerTap","type":"uint256"},{"internalType":"uint256","name":"energyBar","type":"uint256"},{"internalType":"uint256","name":"burnMultiplier","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"pointsRequired","type":"uint256"}],"name":"levelUpEnergyBar","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"pointsRequired","type":"uint256"}],"name":"levelUpPointsPerTap","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"pointsPerTokenClaim","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"tap","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"token","outputs":[{"internalType":"contract IBlazzyToken","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"users","outputs":[{"internalType":"uint256","name":"points","type":"uint256"},{"internalType":"uint256","name":"pointsPerTap","type":"uint256"},{"internalType":"uint256","name":"energyBar","type":"uint256"},{"internalType":"uint256","name":"lastClaimTime","type":"uint256"},{"internalType":"uint256","name":"burnMultiplier","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"withdrawTokens","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+    const tokenABI = [{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"address","name":"spender","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint8","name":"version","type":"uint8"}],"name":"Initialized","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"value","type":"uint256"}],"name":"Transfer","type":"event"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"address","name":"spender","type":"address"}],"name":"allowance","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"approve","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"decimals","outputs":[{"internalType":"uint8","name":"","type":"uint8"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"subtractedValue","type":"uint256"}],"name":"decreaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"spender","type":"address"},{"internalType":"uint256","name":"addedValue","type":"uint256"}],"name":"increaseAllowance","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_owner","type":"address"},{"internalType":"string","name":"_name","type":"string"},{"internalType":"string","name":"_symbol","type":"string"},{"internalType":"uint256","name":"_totalSupply","type":"uint256"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferFrom","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"}];
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        try {
+          provider = new ethers.BrowserProvider(window.ethereum);
+          await provider.send('eth_requestAccounts', []);
+          signer = provider.getSigner();
+          userAddress = await signer.getAddress();
+
+          gameContract = new ethers.Contract(gameContractAddress, gameABI, signer);
+          tokenContract = new ethers.Contract(tokenContractAddress, tokenABI, signer);
+
+          document.getElementById('wallet-status').textContent = `Connected: ${userAddress}`;
+          document.getElementById('connect-wallet').style.display = 'none';
+          document.getElementById('tap-button').style.display = 'inline-block';
+          document.getElementById('claim-tokens-button').style.display = 'inline-block';
+          document.getElementById('level-up-tap-button').style.display = 'inline-block';
+          document.getElementById('level-up-energy-bar-button').style.display = 'inline-block';
+          document.getElementById('burn-tokens-button').style.display = 'inline-block';
+
+          updateUserStats();
+        } catch (error) {
+          console.error(error);
+          alert('Error connecting wallet: ' + error.message);
+        }
+      } else {
+        alert('Please install MetaMask or an Ethereum wallet extension.');
+      }
+    }
+
+    async function updateUserStats() {
+      const userStats = await gameContract.getUserStats(userAddress);
+      document.getElementById('points').textContent = userStats[0];
+      document.getElementById('points-per-tap').textContent = userStats[1];
+      document.getElementById('energy-bar').textContent = userStats[2];
+      document.getElementById('burn-multiplier').textContent = userStats[3];
+    }
+
+    async function tap() {
+      await gameContract.tap();
+      updateUserStats();
+    }
+
+    async function claimTokens() {
+      try {
+        await gameContract.claimTokens();
+        alert('Tokens claimed!');
+        updateUserStats();
+      } catch (err) {
+        alert('Error claiming tokens: ' + err.message);
+      }
+    }
+
+    async function levelUpPointsPerTap() {
+      const pointsRequired = 1000; // Define how many points are needed to level up
+      try {
+        await gameContract.levelUpPointsPerTap(pointsRequired);
+        alert('Points per tap leveled up!');
+        updateUserStats();
+      } catch (err) {
+        alert('Error leveling up: ' + err.message);
+      }
+    }
+
+    async function levelUpEnergyBar() {
+      const pointsRequired = 1000; // Define how many points are needed to level up
+      try {
+        await gameContract.levelUpEnergyBar(pointsRequired);
+        alert('Energy bar leveled up!');
+        updateUserStats();
+      } catch (err) {
+        alert('Error leveling up: ' + err.message);
+      }
+    }
+
+    async function burnTokens() {
+      const burnAmount = ethers.utils.parseUnits('10', 18); // Example: Burn 10 tokens
+      try {
+        await tokenContract.approve(gameContractAddress, burnAmount);
+        await gameContract.burnTokensForMultiplier(burnAmount);
+        alert('Tokens burned for multiplier!');
+        updateUserStats();
+      } catch (err) {
+        alert('Error burning tokens: ' + err.message);
+      }
+    }
+  </script>
+
+</body>
+</html>
