@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blazzy Token Dashboard</title>
+    <!-- Favicon -->
+    <link rel="icon" href="https://ipfs.io/ipfs/QmaGjJR9WbEqcbZWTqut64iJfZ33PepcNBtsFwai7mZnKZ?filename=HH.png" type="image/png">
+
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Blazzy Token Dashboard</h1>
+
+        <!-- Wallet Connection -->
+        <div id="wallet">
+            <button id="connectButton" class="game-btn">Connect Wallet</button>
+            <button id="logoutButton" class="game-btn" style="display: none;">Logout</button>
+        </div>
+
+        <!-- Balance Section -->
+        <div id="balance" class="game-box">
+            <h2>Wallet Balance:</h2>
+            <p id="walletBalance">0 BLZ</p>
+        </div>
+
+        <!-- Points Section -->
+        <div id="points" class="game-box">
+            <h2>Points:</h2>
+            <p id="pointsBalance">0 Points</p>
+            <div id="pointsBar" class="progress-bar">
+                <div id="barFill"></div>
+            </div>
+        </div>
+
+        <!-- Energy Section -->
+        <div id="energy" class="game-box">
+            <h2>Energy:</h2>
+            <p id="energyStatus">Energy: 100</p>
+            <div id="energyBar" class="progress-bar">
+                <div id="energyFill"></div>
+            </div>
+        </div>
+
+        <!-- Tap Button -->
+        <div id="tapButton" class="game-box">
+            <button id="tapBtn" class="game-btn">Tap to Earn Points (6 Points per Tap)</button>
+        </div>
+
+        <!-- Transfer Token Section -->
+        <div id="transfer" class="game-box">
+            <h2>Transfer Tokens</h2>
+            <input type="text" id="recipient" placeholder="Recipient Address" class="game-input" />
+            <input type="number" id="amount" placeholder="Amount" class="game-input" />
+            <button id="transferButton" class="game-btn">Transfer</button>
+        </div>
+
+        <!-- Burn Token Section -->
+        <div id="burn" class="game-box">
+            <h2>Burn Tokens to Level Up</h2>
+            <p>Burn Options:</p>
+            <select id="burnOptions">
+                <option value="10000">10,000 Tokens Burn for 20,000 Points</option>
+                <option value="20000">20,000 Tokens Burn for 50,000 Points</option>
+                <option value="100000">100,000 Tokens Burn for 200,000 Points</option>
+                <option value="1000000">1,000,000 Tokens Burn for 400,000 Points</option>
+            </select>
+            <button id="burnButton" class="game-btn">Burn Tokens</button>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="leaderboard" class="game-box">
+            <h2>Leaderboard</h2>
+            <ul id="leaderboardList"></ul>
+        </div>
+
+        <!-- Store Characters -->
+        <div id="store" class="game-box">
+            <h2>Store</h2>
+            <div id="storeItems" class="store-items">
+                <!-- Store items will be dynamically added here -->
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Set up Web3 and contract connection
+        let web3;
+        let userAccount;
+        let tokenContract;
+        let userPoints = 0;
+        let tokenBalance = 0;
+        let energy = 100;
+        let pointsPerTap = 6; // Default points per tap
+
+        // Blazzy Token Contract ABI and Address (example address)
+        const contractABI = [
+            {
+                "constant": true,
+                "inputs": [{ "name": "_owner", "type": "address" }],
+                "name": "balanceOf",
+                "outputs": [{ "name": "", "type": "uint256" }],
+                "payable": false,
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [{ "name": "recipient", "type": "address" }, { "name": "amount", "type": "uint256" }],
+                "name": "transfer",
+                "outputs": [{ "name": "", "type": "bool" }],
+                "payable": false,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "constant": false,
+                "inputs": [{ "name": "amount", "type": "uint256" }],
+                "name": "burn",
+                "outputs": [],
+                "payable": false,
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+        const contractAddress = "0x9Ef3fc220867F6cF5655Db3d950cDA67A3a92F9f"; // Replace with the actual contract address
+
+        // Store Items: Character upgrades (represented by images and points)
+        const storeItems = [
+            { name: "Level Up Power", pointsRequired: 900, image: "levelup.png", description: "Earn more points per tap." },
+            { name: "Extra Energy Boost", pointsRequired: 1500, image: "energyboost.png", description: "Increase the power of your taps." },
+            { name: "Super Tap", pointsRequired: 2500, image: "supertap.png", description: "Unlock a super tap ability." }
+        ];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const connectButton = document.getElementById("connectButton");
+            const logoutButton = document.getElementById("logoutButton");
+            const burnButton = document.getElementById("burnButton");
+            const transferButton = document.getElementById("transferButton");
+            const tapButton = document.getElementById("tapBtn");
+
+            connectButton.addEventListener("click", connectWallet);
+            logoutButton.addEventListener("click", logoutWallet);
+            burnButton.addEventListener("click", burnTokens);
+            transferButton.addEventListener("click", transferTokens);
+            tapButton.addEventListener("click", earnPoints);
+
+            // Initialize Web3
+            if (typeof window.ethereum !== "undefined") {
+                web3 = new Web3(window.ethereum);
+            } else {
+                alert("Please install MetaMask to interact with this application.");
+            }
+
+            // Dynamically create store items
+            loadStoreItems();
+
+            // Start energy recharge every minute
+            setInterval(rechargeEnergy, 60000); // Recharge every minute
+        });
+
+        async function connectWallet() {
+            try {
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                userAccount = accounts[0];
+
+                tokenContract = new web3.eth.Contract(contractABI, contractAddress);
+
+                document.getElementById("walletBalance").innerText = "Loading...";
+                document.getElementById("connectButton").style.display = "none";
+                document.getElementById("logoutButton").style.display = "inline-block";
+
+                await updateTokenBalance();
+                await updatePoints();
+                await loadLeaderboard();
+            } catch (err) {
+                console.error(err);
+                alert("Failed to connect wallet.");
+            }
+        }
+
+        async function logoutWallet() {
+            userAccount = null;
+            tokenContract = null;
+            document.getElementById("connectButton").style.display = "inline-block";
+            document.getElementById("logoutButton").style.display = "none";
+            document.getElementById("walletBalance").innerText = "0 BLZ";
+            document.getElementById("pointsBalance").innerText = "0 Points";
+            document.getElementById("leaderboardList").innerHTML = "";
+            document.getElementById("storeItems").innerHTML = "";
+        }
+
+        async function updateTokenBalance() {
+            try {
+                tokenBalance = await tokenContract.methods.balanceOf(userAccount).call();
+                document.getElementById("walletBalance").innerText = `${web3.utils.fromWei(tokenBalance, 'ether')} BLZ`;
+            } catch (err) {
+                console.error("Error fetching balance:", err);
+            }
+        }
+
+        async function updatePoints() {
+            userPoints = 1000; // Mock data, replace with actual points logic
+            document.getElementById("pointsBalance").innerText = `${userPoints} Points`;
+
+            let barWidth = Math.min(userPoints / 100, 100);
+            document.getElementById("barFill").style.width = `${barWidth}%`;
+        }
+
+        function rechargeEnergy() {
+            if (energy < 100) {
+                energy += 20; // Regenerate 20 energy per minute
+                if (energy > 100) {
+                    energy = 100;
+                }
+                updateEnergy();
+            }
+        }
+
+        function updateEnergy() {
+            document.getElementById("energyStatus").innerText = `Energy: ${energy}`;
+            let energyWidth = (energy / 100) * 100;
+            document.getElementById("energyFill").style.width = `${energyWidth}%`;
+        }
+
+        async function loadLeaderboard() {
+            const leaderboardData = [
+                { name: "User1", points: 5000, burnedTokens: 100000 },
+                { name: "User2", points: 4000, burnedTokens: 80000 }
+            ];
+
+            const leaderboardList = document.getElementById("leaderboardList");
+            leaderboardList.innerHTML = "";
+            leaderboardData.forEach(user => {
+                const listItem = document.createElement("li");
+                listItem.textContent = `${user.name} - ${user.points} Points - ${user.burnedTokens} Tokens Burned`;
+                leaderboardList.appendChild(listItem);
+            });
+        }
+
+        async function burnTokens() {
+            const burnAmount = document.getElementById("burnOptions").value;
+
+            try {
+                const tx = await tokenContract.methods.transfer("0x000000000000000000000000000000000000dEaD", web3.utils.toWei(burnAmount, 'ether')).send({ from: userAccount });
+                alert(`Burned ${burnAmount} tokens!`);
+                updatePoints();
+                loadLeaderboard();
+            } catch (err) {
+                console.error("Error burning tokens:", err);
+            }
+        }
+
+        async function transferTokens() {
+            const recipient = document.getElementById("recipient").value;
+            const amount = document.getElementById("amount").value;
+
+            try {
+                const tx = await tokenContract.methods.transfer(recipient, web3.utils.toWei(amount, 'ether')).send({ from: userAccount });
+                alert(`Transferred ${amount} tokens to ${recipient}`);
+                updateTokenBalance();
+            } catch (err) {
+                console.error("Error transferring tokens:", err);
+            }
+        }
+
+        async function earnPoints() {
+            if (energy >= 10) {
+                userPoints += pointsPerTap;
+                energy -= 10; // Each tap uses 10 energy
+                document.getElementById("pointsBalance").innerText = `${userPoints} Points`;
+
+                // Update progress bar
+                let barWidth = Math.min(userPoints / 100, 100);
+                document.getElementById("barFill").style.width = `${barWidth}%`;
+
+                updateEnergy(); // Update energy bar
+            } else {
+                alert("Not enough energy! Please wait for it to recharge.");
+            }
+        }
+
+        // Load the store items dynamically
+        function loadStoreItems() {
+            const storeItemsDiv = document.getElementById("storeItems");
+
+            storeItems.forEach(item => {
+                const storeItemDiv = document.createElement("div");
+                storeItemDiv.classList.add("store-item");
+
+                storeItemDiv.innerHTML = `
+                    <img src="${item.image}" alt="${item.name}" style="width: 100px; height: 100px;">
+                    <h3>${item.name}</h3>
+                    <p>${item.description}</p>
+                    <p>Cost: ${item.pointsRequired} Points</p>
+                    <button class="buy-btn" onclick="buyItem(${item.pointsRequired})">Buy</button>
+                `;
+                storeItemsDiv.appendChild(storeItemDiv);
+            });
+        }
+
+        // Handle item purchase
+        function buyItem(cost) {
+            if (userPoints >= cost) {
+                userPoints -= cost;
+                document.getElementById("pointsBalance").innerText = `${userPoints} Points`;
+
+                // Additional logic for upgrading or applying item effects can be added here
+                alert("Item purchased successfully!");
+            } else {
+                alert("Not enough points!");
+            }
+        }
+    </script>
+
+</body>
+
+</html>
+
+<style>
+    body {
+        font-family: 'Arial', sans-serif;
+        background: linear-gradient(145deg, #2c3e50, #34495e);
+        color: white;
+        margin: 0;
+        padding: 0;
+    }
+
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    h1 {
+        text-align: center;
+        margin-bottom: 50px;
+    }
+
+    .game-btn {
+        background-color: #2ecc71;
+        padding: 15px 30px;
+        border: none;
+        border-radius: 5px;
+        font-size: 18px;
+        cursor: pointer;
+        margin-top: 20px;
+    }
+
+    .game-btn:hover {
+        background-color: #27ae60;
+    }
+
+    .game-box {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: #34495e;
+        border-radius: 10px;
+        box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .game-input {
+        padding: 10px;
+        font-size: 18px;
+        border-radius: 5px;
+        border: none;
+        margin-bottom: 20px;
+        width: 100%;
+    }
+
+    .progress-bar {
+        width: 100%;
+        background-color: #ecf0f1;
+        border-radius: 10px;
+        height: 20px;
+        margin-top: 10px;
+        overflow: hidden;
+    }
+
+    .progress-bar div {
+        height: 100%;
+        background-color: #2ecc71;
+    }
+
+    .store-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+    .store-item {
+        background-color: #7f8c8d;
+        padding: 20px;
+        border-radius: 10px;
+        width: 200px;
+        text-align: center;
+    }
+
+    .store-item img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .buy-btn {
+        background-color: #f39c12;
+        border: none;
+        padding: 10px;
+        font-size: 16px;
+        cursor: pointer;
+        border-radius: 5px;
+        margin-top: 10px;
+    }
+
+    .buy-btn:hover {
+        background-color: #e67e22;
+    }
+
+    #leaderboardList {
+        list-style-type: none;
+        padding: 0;
+    }
+
+    #leaderboardList li {
+        background-color: #34495e;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+</style>
